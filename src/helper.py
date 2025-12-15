@@ -1,5 +1,10 @@
-import requests
+import os
 import pandas as pd
+import streamlit as st
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+from urllib.parse import quote_plus
+import requests
 
 def get_bond_data():
     url = "https://www.bondsupermart.com/main/ws/v3/bond-selector/filter"   # your endpoint
@@ -20,8 +25,25 @@ def get_bond_data():
                                          "bidPrice", "offerPrice", "issuerCall", "holderPut", 
                                          "nextCallDate", "maturityDate", "perpetual", 
                                          "issuerFitchRating", "bondSnpRating", "status"]]
+        dic.columns = ["issue_code", "offer_ytm", "offer_ytw",
+                       "bond_currency_code", "coupon_rate", "coupon_frequency",
+                       "bid_price", "offer_price", "issuer_call", "holder_put", 
+                       "next_call_date", "maturity_date", "perpetual",
+                       "fitch_rating", "snp_rating", "status"]
         empt = pd.concat([empt, dic])
-    empt["maturityDate"] = pd.to_datetime(empt["maturityDate"], unit="ms")
-    empt["nextCallDate"] = pd.to_datetime(empt["nextCallDate"], unit="ms", errors="coerce")
+    empt["maturityDate"] = pd.to_datetime(empt["maturity_date"], unit="ms")
+    empt["nextCallDate"] = pd.to_datetime(empt["next_call_date"], unit="ms", errors="coerce")
 
     return empt.reset_index(drop = True)
+
+@st.cache_data(ttl = 60)
+def get_unique(_conn, _column):
+    unique_currency = text(
+        f"""
+            SELECT DISTINCT {_column} FROM public.bonds;
+        """
+    )
+
+    return list(pd.read_sql(unique_currency, _conn, params = {"_column": _column})[_column])
+
+
