@@ -1,23 +1,27 @@
 import requests
+import pandas as pd
 
-def get_ID(list_of_URLs):
-    ID_list = []
+def get_bond_data():
+    url = "https://www.bondsupermart.com/main/ws/v3/bond-selector/filter"   # your endpoint
+    payload = {"orderBy":"bondIssuer","order":"asc","pageSize":"25","locale":"en-us"}  # exactly what you saw under "Request Payload"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.bondsupermart.com",
+        "Referer": "https://www.bondsupermart.com/main/....",
+        "User-Agent": "Mozilla/5.0",
+    }
+    r = requests.post(url, json=payload, headers=headers, timeout=30)
+    l = r.json()["bondList"]
+    empt = pd.DataFrame()
+    for d in l:
+        dic = pd.DataFrame([d["bondInfo"]])[["issueCode", "offer_YTM", "offer_YldToWorst", 
+                                         "bondCurrencyCode", "couponRate","couponFrequency", 
+                                         "bidPrice", "offerPrice", "issuerCall", "holderPut", 
+                                         "nextCallDate", "maturityDate", "perpetual", 
+                                         "issuerFitchRating", "bondSnpRating", "status"]]
+        empt = pd.concat([empt, dic])
+    empt["maturityDate"] = pd.to_datetime(empt["maturityDate"], unit="ms")
+    empt["nextCallDate"] = pd.to_datetime(empt["nextCallDate"], unit="ms", errors="coerce")
 
-    for link in list_of_URLs:
-        curr = requests.get(link)
-        data = curr.json()["Data"]
-
-        for key, value in data.items():
-            ID_list.append(value["111752"])
-        # Get price out of here as well?
-    return ID_list
-    
-
-
-
-def main():
-    test = ["https://www.bondsupermart.com/main/ws/v1/bond-exchange/bond/price?symbolList=8000.9.INFOUS0053830,8000.9.FINSFR0051264,8000.9.FINSUK0054442,8000.9.FINSHK0054075,8000.9.FINSUK0053980,8000.9.FINSUK0033821,8000.9.GOVTFEY0001389,8000.9.GOVTFEY0001498,8000.9.GOVTFEY0001593,8000.9.GOVTMY0018201"]
-    print(get_ID(test))
-
-if __name__ == "__main__":
-    main()
+    return empt.reset_index(drop = True)
