@@ -4,7 +4,7 @@ import streamlit as st
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
-from helper import get_unique, get_edge, query_bonds
+from helper import get_unique, query_bonds, query_facets
 
 
 load_dotenv()
@@ -21,24 +21,35 @@ engine = create_engine(
 def main():
     st.title("Interest Rate Arbitrage Calculator")
     col1, col2, col3 = st.columns(3)
+
+
     with engine.connect() as conn:
+        currency = bond_type = coupon_type = None
+        perp = issuer_call = holder_put = None
+        mat_min = mat_max = None
+        coupon_range = None
+        ytw_range = None
+
+        base_facets = query_facets(conn)
+
         with col1:
             unique_currency = get_unique(conn, "bond_currency_code")
             currency = st.selectbox("Currency", 
-                                    unique_currency, 
+                                    [x for x in (base_facets["currencies"] or []) if x], 
                                     index = None,
                                     placeholder = "Select a Currency")
-            unique_bond_type = get_unique(conn, "bond_type")
+
             bond_type = st.selectbox("Bond Type",
-                                    unique_bond_type,
+                                    [x for x in (base_facets["bond_types"] or []) if x],
                                     index = None,
                                     placeholder = "Bond Type")
         with col2:
-            unique_coupon_type = get_unique(conn, "coupon_type")
+
             coupon_type = st.selectbox("Coupon Type",
-                                    unique_coupon_type,
+                                    [x for x in (base_facets["coupon_types"] or []) if x],
                                     index = None,
                                     placeholder = "Coupon Type")
+            
             perp = st.selectbox("Perpetual Bond", 
                                 ["Yes", "No"],
                                 index = None,
@@ -48,34 +59,48 @@ def main():
                                 ["Yes", "No"],
                                 index = None,
                                 placeholder = "Issuer Call")
+            
             holder_put = st.selectbox("Holder Right to Put", 
                                 ["Yes", "No"],
                                 index = None,
                                 placeholder = "Holder Put")
-        maturity_min, maturity_max = get_edge(conn, "maturity_date")
+        filters = dict(
+            currency = currency,
+            bond_type = bond_type,
+            coupon_type = coupon_type,
+            perpetual = perp[0] if perp else None,
+            issuer_call = issuer_call[0] if issuer_call else None,
+            holder_put = holder_put[0] if holder_put else None,
+        )
+
+        maturity_facets = query_facets(engine, exclude  = ["maturity_date"], **filters)
+        ytw_facets = query_facets(engine, exclude = ["offer_ytw"], **filters)
+
+        maturity_min = maturity_facets["mat_min"]
+        maturity_max = maturity_facets["mat_max"]
         maturity_min = maturity_min.to_pydatetime() if pd.notna(maturity_min) else None
         maturity_max = maturity_max.to_pydatetime() if pd.notna(maturity_max) else None
-        maturity_range = st.slider("Maturity Date",
-                                   maturity_min,
-                                   maturity_max,
-                                   (maturity_min, maturity_max)
-                                   )
-        coupon_min, coupon_max = get_edge(conn, "coupon_rate")
-        coupon_range = st.slider("Coupon Rate (%)",
-                                 coupon_min,
-                                 coupon_max,
-                                 (coupon_min, coupon_max))
-        ytw_min, ytw_max = get_edge(conn, "offer_ytw")
-        ytw_range = st.slider("Yielf to Worst (%)",
-                              -10.0,
-                              10.0,
-                              (-10.0, 10.0),
+
+        mat_min, mat_max = st.slider("Maturity Date",
+                            maturity_min,
+                            maturity_max,
+                            (maturity_min, maturity_max)
+                            )
+        
+        _ytw_min = ytw_facets["ytw_min"]
+        _ytw_max = ytw_facets["ytw_max"]
+        ytw_min, ytw_max = st.slider("Yielf to Worst (%)",
+                              _ytw_min,
+                              _ytw_max,
+                              (_ytw_min, _ytw_max),
                               step = 0.01)
-
-    df = query_bonds(engine, currency, ytw_min, ytw_max, maturity_min, maturity_max)
-    st.dataframe(df)
-
-
+        filters["maturity_min"] = mat_min
+        filters["maturity_max"] = mat_max
+        filters["ytw_min"] = ytw_min
+        filters["ytw_max"] = ytw_max
+        df = query_bonds(engine, **filters)
+        st.dataframe(df)
+    print("update")
 if __name__ == "__main__":
     main()
 

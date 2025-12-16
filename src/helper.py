@@ -46,41 +46,8 @@ def get_unique(_conn, _column):
 
     return list(pd.read_sql(unique_currency, _conn)[_column])
 
-
-def get_edge(_conn, _column):
-    min_max = text(
-        f"""
-            SELECT 
-            MIN({_column}) AS min,
-            MAX({_column}) AS max
-            FROM public.bonds;
-        """
-    )
-    df = pd.read_sql(min_max, _conn)
-    return df["min"].iloc[0], df["max"].iloc[0]
-
-
-from sqlalchemy import text
-import pandas as pd
-
-def query_bonds(engine, currency, y_min, y_max, t_min, t_max):
-    where_clauses = [
-        "offer_ytw BETWEEN :ymin AND :ymax",
-        "maturity_date BETWEEN :tmin AND :tmax"
-    ]
-
-    params = {
-        "ymin": float(y_min),
-        "ymax": float(y_max),
-        "tmin": t_min,
-        "tmax": t_max,
-    }
-
-    if currency:
-        where_clauses.append("bond_currency_code = :ccy")
-        params["ccy"] = currency
-
-    where_sql = " AND ".join(where_clauses)
+def query_bonds(engine, **filters):
+    where_sql, params = build_bond_where(**filters)
 
     q = text(f"""
         SELECT
@@ -95,3 +62,68 @@ def query_bonds(engine, currency, y_min, y_max, t_min, t_max):
     """)
 
     return pd.read_sql(q, engine, params=params)
+
+def build_bond_where(
+    currency=None, bond_type=None, coupon_type=None,
+    perpetual=None, issuer_call=None, holder_put=None,
+    ytw_min=None, ytw_max=None, maturity_min=None, maturity_max=None,
+    exclude=set()
+):
+    where_clauses = []
+    params = {}
+
+    if ytw_min is not None and ytw_max is not None and "offer_ytw" not in exclude:
+        where_clauses.append("offer_ytw BETWEEN :ytw_min AND :ytw_max")
+        params["ytw_min"] = float(ytw_min)
+        params["ytw_max"] = float(ytw_max)
+
+    if maturity_min is not None and maturity_max is not None and "maturity_date" not in exclude:
+        where_clauses.append("maturity_date BETWEEN :maturity_min AND :maturity_max")
+        params["maturity_min"] = maturity_min
+        params["maturity_max"] = maturity_max
+
+    if currency and "bond_currency_code" not in exclude:
+        where_clauses.append("bond_currency_code = :ccy")
+        params["ccy"] = currency
+
+    if bond_type and "bond_type" not in exclude:
+        where_clauses.append("bond_type = :bond_type")
+        params["bond_type"] = bond_type
+
+    if coupon_type and "coupon_type" not in exclude:
+        where_clauses.append("coupon_type = :coupon_type")
+        params["coupon_type"] = coupon_type
+
+    if perpetual and "perpetual" not in exclude:
+        where_clauses.append("perpetual = :perpetual")
+        params["perpetual"] = perpetual[0] if isinstance(perpetual, (list, tuple)) else perpetual
+
+    if issuer_call and "issuer_call" not in exclude:
+        where_clauses.append("issuer_call = :issuer_call")
+        params["issuer_call"] = issuer_call[0] if isinstance(issuer_call, (list, tuple)) else issuer_call
+
+    if holder_put and "holder_put" not in exclude:
+        where_clauses.append("holder_put = :holder_put")
+        params["holder_put"] = holder_put[0] if isinstance(holder_put, (list, tuple)) else holder_put
+
+    where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
+    return where_sql, params
+
+def query_facets(engine, exclude=set(), **filters):
+    where_sql, params = build_bond_where(exclude=exclude, **filters)
+
+    q = text(f"""
+        SELECT
+            array_agg(DISTINCT bond_currency_code) AS currencies,
+            array_agg(DISTINCT bond_type) AS bond_types,
+            array_agg(DISTINCT coupon_type) AS coupon_types,
+            MIN(offer_ytw) AS ytw_min,
+            MAX(offer_ytw) AS ytw_max,
+            MIN(maturity_date) AS mat_min,
+            MAX(maturity_date) AS mat_max
+        FROM public.bonds
+        WHERE {where_sql};
+    """)
+    return pd.read_sql(q, engine, params=params).iloc[0].to_dict()
+
+
