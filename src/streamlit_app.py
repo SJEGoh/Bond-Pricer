@@ -4,7 +4,7 @@ import streamlit as st
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
-from helper import get_unique, query_bonds, query_facets
+from helper import query_bonds, query_facets
 
 
 load_dotenv()
@@ -26,14 +26,10 @@ def main():
     with engine.connect() as conn:
         currency = bond_type = coupon_type = None
         perp = issuer_call = holder_put = None
-        mat_min = mat_max = None
-        coupon_range = None
-        ytw_range = None
 
         base_facets = query_facets(conn)
 
         with col1:
-            unique_currency = get_unique(conn, "bond_currency_code")
             currency = st.selectbox("Currency", 
                                     [x for x in (base_facets["currencies"] or []) if x], 
                                     index = None,
@@ -43,6 +39,10 @@ def main():
                                     [x for x in (base_facets["bond_types"] or []) if x],
                                     index = None,
                                     placeholder = "Bond Type")
+            bond_rating = st.selectbox("Fitch Bond Rating",
+                                    [x for x in (base_facets["bond_ratings"] or []) if x],
+                                    index = None,
+                                    placeholder = "Bond Rating")
         with col2:
 
             coupon_type = st.selectbox("Coupon Type",
@@ -54,6 +54,9 @@ def main():
                                 ["Yes", "No"],
                                 index = None,
                                 placeholder = "Perpetual")
+            st.text_input("Loan Tenure (Years)",
+                          value = 0.00,
+                          )
         with col3:
             issuer_call = st.selectbox("Issuer Right to Call", 
                                 ["Yes", "No"],
@@ -64,7 +67,11 @@ def main():
                                 ["Yes", "No"],
                                 index = None,
                                 placeholder = "Holder Put")
+            st.text_input("Loan Interest (%)",
+                          value = 0.00,
+                          )
         filters = dict(
+            bond_rating = bond_rating,
             currency = currency,
             bond_type = bond_type,
             coupon_type = coupon_type,

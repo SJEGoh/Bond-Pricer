@@ -37,15 +37,6 @@ def get_bond_data():
 
     return empt.reset_index(drop = True)
 
-def get_unique(_conn, _column):
-    unique_currency = text(
-        f"""
-            SELECT DISTINCT {_column} FROM public.bonds;
-        """
-    )
-
-    return list(pd.read_sql(unique_currency, _conn)[_column])
-
 def query_bonds(engine, **filters):
     where_sql, params = build_bond_where(**filters)
 
@@ -67,7 +58,7 @@ def build_bond_where(
     currency=None, bond_type=None, coupon_type=None,
     perpetual=None, issuer_call=None, holder_put=None,
     ytw_min=None, ytw_max=None, maturity_min=None, maturity_max=None,
-    exclude=set()
+    bond_rating = None, exclude=set()
 ):
     where_clauses = []
     params = {}
@@ -106,6 +97,10 @@ def build_bond_where(
         where_clauses.append("holder_put = :holder_put")
         params["holder_put"] = holder_put[0] if isinstance(holder_put, (list, tuple)) else holder_put
 
+    if bond_rating and "bond_rating" not in exclude:
+        where_clauses.append("bond_rating = :bond_rating")
+        params["bond_rating"] = bond_rating
+
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
     return where_sql, params
 
@@ -117,6 +112,7 @@ def query_facets(engine, exclude=set(), **filters):
             array_agg(DISTINCT bond_currency_code) AS currencies,
             array_agg(DISTINCT bond_type) AS bond_types,
             array_agg(DISTINCT coupon_type) AS coupon_types,
+            array_agg(DISTINCT fitch_rating) AS bond_ratings,
             MIN(offer_ytw) AS ytw_min,
             MAX(offer_ytw) AS ytw_max,
             MIN(maturity_date) AS mat_min,
