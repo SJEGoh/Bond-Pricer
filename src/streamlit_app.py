@@ -24,6 +24,7 @@ def main():
     st.title("Interest Rate Arbitrage Calculator")
     col1, col2, col3 = st.columns(3)
 
+    st.set_page_config(page_title="Interest Rate Arbitrage Calculator", layout="wide")
 
     with engine.connect() as conn:
         currency = bond_type = coupon_type = None
@@ -31,7 +32,8 @@ def main():
 
         base_facets = query_facets(conn)
 
-        with col1:
+        with st.sidebar:
+            st.header("Filters")
             currency = st.selectbox("Currency", 
                                     [x for x in (base_facets["currencies"] or []) if x], 
                                     index = None,
@@ -45,7 +47,6 @@ def main():
                                     [x for x in (base_facets["fitch_ratings"] or []) if x],
                                     index = None,
                                     placeholder = "Fitch Bond Rating")
-        with col2:
 
             coupon_type = st.selectbox("Coupon Type",
                                     [x for x in (base_facets["coupon_types"] or []) if x],
@@ -56,7 +57,6 @@ def main():
                                 ["Yes", "No"],
                                 index = None,
                                 placeholder = "Perpetual")
-        with col3:
             issuer_call = st.selectbox("Issuer Right to Call", 
                                 ["Yes", "No"],
                                 index = None,
@@ -86,27 +86,27 @@ def main():
         maturity_max = maturity_facets["mat_max"]
         maturity_min = maturity_min.to_pydatetime() if pd.notna(maturity_min) else None
         maturity_max = maturity_max.to_pydatetime() if pd.notna(maturity_max) else None
-        try:
-            mat_min, mat_max = st.slider("Maturity Date",
+        _ytw_min = ytw_facets["ytw_min"]
+        _ytw_max = ytw_facets["ytw_max"]
+        with st.expander("Advanced"):
+            try:
+                mat_min, mat_max = st.slider("Maturity Date",
                             maturity_min,
                             maturity_max,
                             (maturity_min, maturity_max)
                             )
-        except:
-            mat_min = 0
-            mat_max = 0
-        
-        _ytw_min = ytw_facets["ytw_min"]
-        _ytw_max = ytw_facets["ytw_max"]
-        try:
-            ytw_min, ytw_max = st.slider("Yielf to Worst (%)",
+            except:
+                mat_min = 0
+                mat_max = 0
+            try:
+                ytw_min, ytw_max = st.slider("Yielf to Worst (%)",
                               _ytw_min,
                               _ytw_max,
                               (_ytw_min, _ytw_max),
                               step = 0.01)
-        except:
-            ytw_min = 0
-            ytw_max = 0
+            except:
+                ytw_min = 0
+                ytw_max = 0
         filters["maturity_min"] = mat_min
         filters["maturity_max"] = mat_max
         filters["ytw_min"] = ytw_min
