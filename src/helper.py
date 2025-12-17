@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
-from urllib.parse import quote_plus
+import plotly.graph_objects as go
+
 import requests
 
 def get_bond_data():
@@ -42,7 +42,8 @@ def query_bonds(engine, **filters):
 
     q = text(f"""
         SELECT
-            issue_code,
+            bond_name,
+            offer_price,
             offer_ytw,
             coupon_rate,
             maturity_date
@@ -51,14 +52,21 @@ def query_bonds(engine, **filters):
         ORDER BY offer_ytw DESC
         LIMIT 200;
     """)
-
-    return pd.read_sql(q, engine, params=params)
+    try:
+        df = pd.read_sql(q, engine, params=params)
+    except:
+        df = pd.DataFrame(columns = ["bond_name",
+            "offer_price",
+            "offer_ytw",
+            "coupon_rate",
+            "maturity_date"])
+    return df
 
 def build_bond_where(
     currency=None, bond_type=None, coupon_type=None,
     perpetual=None, issuer_call=None, holder_put=None,
     ytw_min=None, ytw_max=None, maturity_min=None, maturity_max=None,
-    bond_rating = None, exclude=set()
+    fitch_rating = None, exclude=set()
 ):
     where_clauses = []
     params = {}
@@ -97,9 +105,9 @@ def build_bond_where(
         where_clauses.append("holder_put = :holder_put")
         params["holder_put"] = holder_put[0] if isinstance(holder_put, (list, tuple)) else holder_put
 
-    if bond_rating and "bond_rating" not in exclude:
-        where_clauses.append("bond_rating = :bond_rating")
-        params["bond_rating"] = bond_rating
+    if fitch_rating and "fitch_rating" not in exclude:
+        where_clauses.append("fitch_rating = :fitch_rating")
+        params["fitch_rating"] = fitch_rating
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
     return where_sql, params
@@ -112,7 +120,7 @@ def query_facets(engine, exclude=set(), **filters):
             array_agg(DISTINCT bond_currency_code) AS currencies,
             array_agg(DISTINCT bond_type) AS bond_types,
             array_agg(DISTINCT coupon_type) AS coupon_types,
-            array_agg(DISTINCT fitch_rating) AS bond_ratings,
+            array_agg(DISTINCT fitch_rating) AS fitch_ratings,
             MIN(offer_ytw) AS ytw_min,
             MAX(offer_ytw) AS ytw_max,
             MIN(maturity_date) AS mat_min,
@@ -122,4 +130,57 @@ def query_facets(engine, exclude=set(), **filters):
     """)
     return pd.read_sql(q, engine, params=params).iloc[0].to_dict()
 
+def get_graph_df(bond, interest, engine):
+    q = text(f"""
+            SELECT
+                coupon_frequency,
+                years_to_maturity,
+                next_call_date
+             FROM public.bonds
+             WHERE bond_name = '{bond["bond_name"]}';
+             """)
+    df = pd.read_sql(q, engine)
 
+    years_mat = float(df["years_to_maturity"].iloc[0])
+    coupon_freq = int(df["coupon_frequency"].iloc[0])
+    total_periods = int(round(years_mat * coupon_freq))
+    time_step = 1.0/coupon_freq
+
+    today = pd.Timestamp.today()
+    if df["next_call_date"].item():
+        next_call = df["next_call_date"].iloc[0]
+        years_left = (next_call - today).days / 365.25
+    else:
+        next_call = None
+
+    units = 100/bond["offer_price"]
+    coupon = units * bond["coupon_rate"]/(coupon_freq)
+
+    time = [0]
+    cf_loan = [100]
+    last_ = 100
+    cf_bond = [100]
+    for t in range(1, total_periods):
+        if t%coupon_freq == 0:
+            cf_loan.append(last_ + float(interest))
+            last_ = cf_loan[-1]
+        else:
+            cf_loan.append(last_)
+        time.append(t * time_step)
+        cf_bond.append(cf_bond[-1] + coupon)
+    
+    cf_df = pd.DataFrame({"time": time, "cf_loan": cf_loan, "cf_bond": cf_bond})
+    return cf_df    
+
+def make_plot(fig, cf_df):
+    cf_df["cf_diff"] = cf_df["cf_bond"] - cf_df["cf_loan"]
+    fig.add_trace(go.Scatter(x = cf_df["time"], y = cf_df["cf_bond"],
+                             customdata=cf_df[["cf_loan", "cf_diff"]].to_numpy(),
+                            hovertemplate=(
+                                "<b>t</b>: %{x:.2f}<br>"
+                                "<b>Bond CF</b>: %{y:.2f}<br>"
+                                "<b>Loan CF</b>: %{customdata[0]:.2f}<br>"
+                                "<b>CF Diff</b>: %{customdata[1]:.2f}"
+                                "<extra></extra>"
+                            )))
+    fig.add_trace(go.Scatter(x = cf_df["time"], y = cf_df["cf_loan"]))
