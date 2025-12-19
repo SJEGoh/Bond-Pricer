@@ -60,13 +60,15 @@ def query_bonds(engine, **filters):
             "offer_ytw",
             "coupon_rate",
             "maturity_date"])
+
+    df.columns = ["Bond Name", "Ask Price", "Yield-to-Worse", "Coupon Rate", "Maturity Date"]
     return df
 
 def build_bond_where(
     currency=None, bond_type=None, coupon_type=None,
     perpetual=None, issuer_call=None, holder_put=None,
     ytw_min=None, ytw_max=None, maturity_min=None, maturity_max=None,
-    fitch_rating = None, exclude=set()
+    snp_rating = None, fitch_rating = None, exclude=set()
 ):
     where_clauses = []
     params = {}
@@ -109,6 +111,10 @@ def build_bond_where(
         where_clauses.append("fitch_rating = :fitch_rating")
         params["fitch_rating"] = fitch_rating
 
+    if snp_rating and "snp_rating" not in exclude:
+        where_clauses.append("fitch_rating = :snp_rating")
+        params["snp_rating"] = snp_rating
+
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
     return where_sql, params
 
@@ -121,6 +127,7 @@ def query_facets(engine, exclude=set(), **filters):
             array_agg(DISTINCT bond_type) AS bond_types,
             array_agg(DISTINCT coupon_type) AS coupon_types,
             array_agg(DISTINCT fitch_rating) AS fitch_ratings,
+            array_agg(DISTINCT snp_rating) AS snp_ratings,
             MIN(offer_ytw) AS ytw_min,
             MAX(offer_ytw) AS ytw_max,
             MIN(maturity_date) AS mat_min,

@@ -22,8 +22,6 @@ engine = create_engine(
 
 def main():
     st.title("Interest Rate Arbitrage Calculator")
-    col1, col2, col3 = st.columns(3)
-
     st.set_page_config(page_title="Interest Rate Arbitrage Calculator", layout="wide")
 
     with engine.connect() as conn:
@@ -45,6 +43,10 @@ def main():
                                     placeholder = "Bond Type")
             fitch_rating = st.selectbox("Fitch Bond Rating",
                                     [x for x in (base_facets["fitch_ratings"] or []) if x],
+                                    index = None,
+                                    placeholder = "Fitch Bond Rating")
+            snp_rating = st.selectbox("S&P Issuer Rating",
+                                    [x for x in (base_facets["snp_ratings"] or []) if x],
                                     index = None,
                                     placeholder = "Fitch Bond Rating")
 
@@ -70,6 +72,7 @@ def main():
                           value = 0.00,
                           )
         filters = dict(
+            snp_rating = snp_rating,
             fitch_rating = fitch_rating,
             currency = currency,
             bond_type = bond_type,
@@ -132,6 +135,7 @@ def main():
         st.plotly_chart(fig, width="stretch")
 
     print("update")
+
 if __name__ == "__main__":
     main()
 
