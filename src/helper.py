@@ -22,13 +22,13 @@ def get_bond_data():
                                          "bondCurrencyCode", "couponRate","couponFrequency", 
                                          "bidPrice", "offerPrice", "issuerCall", "holderPut", 
                                          "nextCallDate", "maturityDate", "yearsToMaturity","perpetual", 
-                                         "issuerFitchRating", "bondSnpRating", "status", "bondType", 
+                                         "issuerFitchRating", "bondFitchRating", "status", "bondType", 
                                          "couponType"]]
         dic.columns = ["bond_name", "issue_code", "offer_ytm", "offer_ytw",
                        "bond_currency_code", "coupon_rate", "coupon_frequency",
                        "bid_price", "offer_price", "issuer_call", "holder_put", 
                        "next_call_date", "maturity_date", "years_to_maturity","perpetual",
-                       "fitch_rating", "snp_rating", "status", "bond_type", "coupon_type"]
+                       "fitch_rating", "fitch_bond_rating", "status", "bond_type", "coupon_type"]
         empt = pd.concat([empt, dic])
     empt["maturity_date"] = pd.to_datetime(empt["maturity_date"], unit="ms")
     empt["next_call_date"] = pd.to_datetime(empt["next_call_date"], unit="ms", errors="coerce")
@@ -66,7 +66,7 @@ def build_bond_where(
     currency=None, bond_type=None, coupon_type=None,
     perpetual=None, issuer_call=None, holder_put=None,
     ytw_min=None, ytw_max=None, maturity_min=None, maturity_max=None,
-    snp_rating = None, fitch_rating = None, exclude=set()
+    fitch_bond_rating = None, fitch_rating = None, exclude=set()
 ):
     where_clauses = []
     params = {}
@@ -109,9 +109,9 @@ def build_bond_where(
         where_clauses.append("fitch_rating = :fitch_rating")
         params["fitch_rating"] = fitch_rating
 
-    if snp_rating and "snp_rating" not in exclude:
-        where_clauses.append("fitch_rating = :snp_rating")
-        params["snp_rating"] = snp_rating
+    if fitch_bond_rating and "fitch_bond_rating" not in exclude:
+        where_clauses.append("fitch_bond_rating = :fitch_bond_rating")
+        params["fitch_bond_rating"] = fitch_bond_rating
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
     return where_sql, params
@@ -125,7 +125,7 @@ def query_facets(engine, exclude=set(), **filters):
             array_agg(DISTINCT bond_type) AS bond_types,
             array_agg(DISTINCT coupon_type) AS coupon_types,
             array_agg(DISTINCT fitch_rating) AS fitch_ratings,
-            array_agg(DISTINCT snp_rating) AS snp_ratings,
+            array_agg(DISTINCT fitch_bond_rating) AS fitch_bond_ratings,
             MIN(offer_ytw) AS ytw_min,
             MAX(offer_ytw) AS ytw_max,
             MIN(maturity_date) AS mat_min,
@@ -142,7 +142,7 @@ def get_graph_df(bond, interest, engine):
                 years_to_maturity,
                 next_call_date
              FROM public.bonds
-             WHERE bond_name = '{bond["bond_name"]}';
+             WHERE bond_name = '{bond["Bond Name"]}';
              """)
     df = pd.read_sql(q, engine)
 
@@ -154,12 +154,11 @@ def get_graph_df(bond, interest, engine):
     today = pd.Timestamp.today()
     if df["next_call_date"].item():
         next_call = df["next_call_date"].iloc[0]
-        years_left = (next_call - today).days / 365.25
     else:
         next_call = None
 
-    units = 100/bond["offer_price"]
-    coupon = units * bond["coupon_rate"]/(coupon_freq)
+    units = 100/bond["Ask Price"]
+    coupon = units * bond["Coupon Rate"]/(coupon_freq)
 
     time = [0]
     cf_loan = [100]
@@ -189,3 +188,11 @@ def make_plot(fig, cf_df):
                                 "<extra></extra>"
                             )))
     fig.add_trace(go.Scatter(x = cf_df["time"], y = cf_df["cf_loan"]))
+
+
+
+def main():
+    print(get_bond_data())
+
+if __name__ == "__main__":
+    main()

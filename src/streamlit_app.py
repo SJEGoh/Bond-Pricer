@@ -4,7 +4,7 @@ import streamlit as st
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
-from helper import query_bonds, query_facets, get_graph_df, make_plot
+from helper import query_bonds, query_facets, get_graph_df, make_plot, get_bond_data
 import plotly.graph_objects as go
 
 
@@ -19,6 +19,29 @@ db = os.getenv("DB_NAME")
 engine = create_engine(
     f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
 )
+
+with engine.connect() as conn:
+    print("SQL Database Connected")
+
+@st.cache_resource
+def data_to_sql():
+    df = get_bond_data()
+    df.to_sql(
+        name="bonds",
+        con=engine,
+        if_exists="replace",  
+        index=False,
+        method="multi",     
+        chunksize=5000
+    )
+
+    print("Data Uploaded")
+
+@st.cache_data
+def get_bond_df():
+    return get_bond_data()
+
+get_bond_df()
 
 def main():
     st.title("Interest Rate Arbitrage Calculator")
@@ -41,12 +64,12 @@ def main():
                                     [x for x in (base_facets["bond_types"] or []) if x],
                                     index = None,
                                     placeholder = "Bond Type")
-            fitch_rating = st.selectbox("Fitch Bond Rating",
+            fitch_rating = st.selectbox("Fitch Issuer Rating",
                                     [x for x in (base_facets["fitch_ratings"] or []) if x],
                                     index = None,
-                                    placeholder = "Fitch Bond Rating")
-            snp_rating = st.selectbox("S&P Issuer Rating",
-                                    [x for x in (base_facets["snp_ratings"] or []) if x],
+                                    placeholder = "Fitch Issuer Rating")
+            fitch_bond_rating = st.selectbox("Fitch Bond Rating",
+                                    [x for x in (base_facets["fitch_bond_ratings"] or []) if x],
                                     index = None,
                                     placeholder = "Fitch Bond Rating")
 
@@ -72,7 +95,7 @@ def main():
                           value = 0.00,
                           )
         filters = dict(
-            snp_rating = snp_rating,
+            fitch_bond_rating = fitch_bond_rating,
             fitch_rating = fitch_rating,
             currency = currency,
             bond_type = bond_type,
