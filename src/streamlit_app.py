@@ -23,7 +23,6 @@ engine = create_engine(
 with engine.connect() as conn:
     print("SQL Database Connected")
 
-@st.cache_resource
 def data_to_sql():
     df = get_bond_data()
     df.to_sql(
@@ -39,7 +38,7 @@ def data_to_sql():
 
 @st.cache_data
 def get_bond_df():
-    return get_bond_data()
+    return data_to_sql()
 
 get_bond_df()
 

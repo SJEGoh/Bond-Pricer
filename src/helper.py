@@ -5,8 +5,8 @@ import plotly.graph_objects as go
 import requests
 
 def get_bond_data():
-    url = "https://www.bondsupermart.com/main/ws/v3/bond-selector/filter"   # your endpoint
-    payload = {"orderBy":"bondIssuer","order":"asc","pageSize":"25","locale":"en-us"}  # exactly what you saw under "Request Payload"
+    url = "https://www.bondsupermart.com/main/ws/v3/bond-selector/filter"  
+    payload = {"orderBy":"bondIssuer","order":"asc","pageSize":"25","locale":"en-us"}  
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/plain, */*",
@@ -32,7 +32,6 @@ def get_bond_data():
         empt = pd.concat([empt, dic])
     empt["maturity_date"] = pd.to_datetime(empt["maturity_date"], unit="ms")
     empt["next_call_date"] = pd.to_datetime(empt["next_call_date"], unit="ms", errors="coerce")
-
     return empt.reset_index(drop = True)
 
 def query_bonds(engine, **filters):
