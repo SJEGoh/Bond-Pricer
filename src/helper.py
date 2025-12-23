@@ -1,7 +1,6 @@
 import pandas as pd
 from sqlalchemy import text
 import plotly.graph_objects as go
-
 import requests
 
 def get_bond_data():
